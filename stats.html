@@ -176,9 +176,16 @@
 
     function renderStats(data, isServerMode) {
       const banner = document.getElementById("modeBanner");
-      banner.innerHTML = isServerMode
-        ? "<strong>Servermodus actief:</strong> Alle bezoekers van de website worden centraal bijgehouden."
-        : "<strong>Lokale modus (file://):</strong> Je bekijkt nu lokale browserstatistieken. Start <code>node server.js</code> om alle bezoekers wereldwijd/op het netwerk centraal te tellen.";
+      if (isServerMode && data.storage === "neon-postgres") {
+        banner.innerHTML =
+          "<strong>Neon PostgreSQL actief:</strong> Alle bezoekers en bestellingen worden blijvend opgeslagen in je Neon-database.";
+      } else if (isServerMode) {
+        banner.innerHTML =
+          "<strong>Servermodus (lokaal bestand):</strong> Bezoekers worden bijgehouden in <code>stats.json</code>. Voeg <code>DATABASE_URL</code> toe op Render voor blijvende opslag in Neon.";
+      } else {
+        banner.innerHTML =
+          "<strong>Lokale modus (file://):</strong> Je bekijkt nu lokale browserstatistieken. Start <code>node server.js</code> om alle bezoekers centraal te tellen.";
+      }
 
       document.getElementById("kpiTotalVisits").textContent = data.totalVisits ?? 0;
       document.getElementById("kpiUniqueVisitors").textContent = data.uniqueVisitors ?? 0;
