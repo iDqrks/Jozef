@@ -197,7 +197,20 @@ document.addEventListener("DOMContentLoaded", () => {
       fetch("/api/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageType, deliveryMethod }),
+        body: JSON.stringify({
+          orderNumber,
+          fullName,
+          email,
+          phone,
+          packageType,
+          quantity: Number(quantity) || 1,
+          totalPrice,
+          deliveryMethod,
+          pickupLocation: deliveryMethod === "pickup" ? pickupLocation : "",
+          street: deliveryMethod === "delivery" ? street : "",
+          postalCode: deliveryMethod === "delivery" ? postalCode : "",
+          notes,
+        }),
       }).catch(() => {});
     }
     const deliveryText =

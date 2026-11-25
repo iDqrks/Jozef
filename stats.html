@@ -161,6 +161,11 @@
         <ul class="event-list" id="eventList"></ul>
       </div>
     </section>
+
+    <section class="panel" style="margin-bottom: 3rem;">
+      <h2>Binnengekomen bestellingen</h2>
+      <ul class="event-list" id="ordersList"></ul>
+    </section>
   </main>
 
   <script>
@@ -223,6 +228,43 @@
           li.innerHTML = `<span>${label}</span><small>${time}</small>`;
           eventList.appendChild(li);
         });
+      }
+
+      const ordersList = document.getElementById("ordersList");
+      if (ordersList) {
+        ordersList.innerHTML = "";
+        const orders = data.orders || [];
+        if (orders.length === 0) {
+          ordersList.innerHTML = "<li><span>Nog geen bestellingen ontvangen</span></li>";
+        } else {
+          orders.forEach((order) => {
+            const li = document.createElement("li");
+            li.style.flexDirection = "column";
+            li.style.alignItems = "flex-start";
+            li.style.gap = "0.25rem";
+
+            const time = new Date(order.timestamp).toLocaleString("nl-BE");
+            const price = Number(order.totalPrice || 0).toFixed(2).replace(".", ",");
+            const locationText =
+              order.deliveryMethod === "delivery"
+                ? `Bezorging: ${order.street || ""}, ${order.postalCode || ""}`
+                : `Afhalen: ${order.pickupLocation || "Mekanders-locatie"}`;
+
+            const title = document.createElement("strong");
+            title.textContent = `${order.orderNumber || "Bestelling"} — ${order.fullName || "Onbekend"} (${order.quantity || 1}x ${order.packageType || "Kerstpakket"} • € ${price})`;
+
+            const contact = document.createElement("span");
+            contact.textContent = `${order.email || "-"} • ${order.phone || "-"} • ${locationText}`;
+
+            const meta = document.createElement("small");
+            meta.textContent = order.notes ? `${time} • Opmerking: ${order.notes}` : time;
+
+            li.appendChild(title);
+            li.appendChild(contact);
+            li.appendChild(meta);
+            ordersList.appendChild(li);
+          });
+        }
       }
     }
 

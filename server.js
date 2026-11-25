@@ -43,10 +43,33 @@ function initPostgres() {
     await pgPool.query(`
       CREATE TABLE IF NOT EXISTS site_orders (
         id SERIAL PRIMARY KEY,
+        order_number TEXT,
+        full_name TEXT,
+        email TEXT,
+        phone TEXT,
         package_type TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        total_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
         delivery_method TEXT NOT NULL,
+        pickup_location TEXT,
+        street TEXT,
+        postal_code TEXT,
+        notes TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+    `);
+    await pgPool.query(`
+      ALTER TABLE site_orders
+        ADD COLUMN IF NOT EXISTS order_number TEXT,
+        ADD COLUMN IF NOT EXISTS full_name TEXT,
+        ADD COLUMN IF NOT EXISTS email TEXT,
+        ADD COLUMN IF NOT EXISTS phone TEXT,
+        ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS total_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS pickup_location TEXT,
+        ADD COLUMN IF NOT EXISTS street TEXT,
+        ADD COLUMN IF NOT EXISTS postal_code TEXT,
+        ADD COLUMN IF NOT EXISTS notes TEXT;
     `);
   })();
 
@@ -146,12 +169,43 @@ async function recordVisit(visitorId) {
   return stats.totalVisits;
 }
 
-async function recordOrder(packageType, deliveryMethod) {
+async function recordOrder(orderData) {
+  const {
+    orderNumber = "",
+    fullName = "",
+    email = "",
+    phone = "",
+    packageType = "Kerstpakket",
+    quantity = 1,
+    totalPrice = 0,
+    deliveryMethod = "pickup",
+    pickupLocation = "",
+    street = "",
+    postalCode = "",
+    notes = "",
+  } = orderData;
+
   if (DATABASE_URL) {
     await initPostgres();
     await pgPool.query(
-      "INSERT INTO site_orders (package_type, delivery_method) VALUES ($1, $2)",
-      [packageType, deliveryMethod]
+      `INSERT INTO site_orders (
+        order_number, full_name, email, phone, package_type, quantity,
+        total_price, delivery_method, pickup_location, street, postal_code, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [
+        orderNumber,
+        fullName,
+        email,
+        phone,
+        packageType,
+        quantity,
+        totalPrice,
+        deliveryMethod,
+        pickupLocation,
+        street,
+        postalCode,
+        notes,
+      ]
     );
     const countRes = await pgPool.query("SELECT COUNT(*)::int AS total FROM site_orders");
     return countRes.rows[0].total;
@@ -159,6 +213,23 @@ async function recordOrder(packageType, deliveryMethod) {
 
   const stats = loadLocalStats();
   stats.totalOrders += 1;
+  stats.orders = Array.isArray(stats.orders) ? stats.orders : [];
+  stats.orders.unshift({
+    orderNumber,
+    fullName,
+    email,
+    phone,
+    packageType,
+    quantity,
+    totalPrice,
+    deliveryMethod,
+    pickupLocation,
+    street,
+    postalCode,
+    notes,
+    timestamp: new Date().toISOString(),
+  });
+  stats.orders = stats.orders.slice(0, 100);
   stats.recentEvents.unshift({
     type: "order",
     packageType,
@@ -173,7 +244,7 @@ async function recordOrder(packageType, deliveryMethod) {
 async function fetchStats() {
   if (DATABASE_URL) {
     await initPostgres();
-    const [summaryRes, ordersRes, dailyRes, recentRes] = await Promise.all([
+    const [summaryRes, ordersRes, dailyRes, recentRes, ordersListRes] = await Promise.all([
       pgPool.query(`
         SELECT
           COUNT(*)::int AS "totalVisits",
@@ -201,6 +272,25 @@ async function fetchStats() {
         ORDER BY timestamp DESC
         LIMIT 20
       `),
+      pgPool.query(`
+        SELECT
+          order_number AS "orderNumber",
+          full_name AS "fullName",
+          email,
+          phone,
+          package_type AS "packageType",
+          quantity,
+          total_price AS "totalPrice",
+          delivery_method AS "deliveryMethod",
+          pickup_location AS "pickupLocation",
+          street,
+          postal_code AS "postalCode",
+          notes,
+          created_at AS timestamp
+        FROM site_orders
+        ORDER BY created_at DESC
+        LIMIT 50
+      `),
     ]);
 
     const dailyVisits = {};
@@ -215,6 +305,7 @@ async function fetchStats() {
       totalOrders: ordersRes.rows[0]?.totalOrders || 0,
       dailyVisits,
       recentEvents: recentRes.rows,
+      orders: ordersListRes.rows,
       storage: "neon-postgres",
     };
   }
@@ -228,6 +319,7 @@ async function fetchStats() {
     totalOrders: stats.totalOrders,
     dailyVisits: stats.dailyVisits,
     recentEvents: stats.recentEvents,
+    orders: Array.isArray(stats.orders) ? stats.orders : [],
     storage: "local-json",
   };
 }
@@ -253,9 +345,21 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && urlPath === "/api/order") {
       const body = await readJsonBody(req);
-      const packageType = String(body.packageType || "Kerstpakket").slice(0, 80);
-      const deliveryMethod = String(body.deliveryMethod || "pickup").slice(0, 30);
-      const totalOrders = await recordOrder(packageType, deliveryMethod);
+      const orderData = {
+        orderNumber: String(body.orderNumber || "").slice(0, 40),
+        fullName: String(body.fullName || "").slice(0, 120),
+        email: String(body.email || "").slice(0, 150),
+        phone: String(body.phone || "").slice(0, 50),
+        packageType: String(body.packageType || "Kerstpakket").slice(0, 80),
+        quantity: Math.max(1, Math.min(20, Number(body.quantity) || 1)),
+        totalPrice: Number(body.totalPrice) || 0,
+        deliveryMethod: String(body.deliveryMethod || "pickup").slice(0, 30),
+        pickupLocation: String(body.pickupLocation || "").slice(0, 150),
+        street: String(body.street || "").slice(0, 150),
+        postalCode: String(body.postalCode || "").slice(0, 60),
+        notes: String(body.notes || "").slice(0, 500),
+      };
+      const totalOrders = await recordOrder(orderData);
       sendJson(res, 200, { ok: true, totalOrders });
       return;
     }
