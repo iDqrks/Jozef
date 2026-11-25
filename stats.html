@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mekanders vzw — Bezoekersstatistieken</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .stats-header {
+      padding: 2.5rem 0 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .kpi-card span {
+      display: block;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .kpi-card strong {
+      font-family: "Plus Jakarta Sans", sans-serif;
+      font-size: 2.1rem;
+      color: var(--primary);
+    }
+    .stats-panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .panel h2 {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .daily-list,
+    .event-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0.7rem;
+    }
+    .daily-list li,
+    .event-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.65rem 0.85rem;
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      font-size: 0.92rem;
+    }
+    .mode-banner {
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.9rem 1.1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.92rem;
+      color: var(--primary-dark);
+    }
+    @media (max-width: 900px) {
+      .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .stats-panels {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 560px) {
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand">
+        <span class="brand-text">
+          <strong>Mekanders</strong>
+          <small>Bezoekersstatistieken</small>
+        </span>
+      </a>
+      <div class="header-actions">
+        <a href="index.html" class="btn btn-outline btn-sm">&larr; Terug naar website</a>
+        <button type="button" class="btn btn-primary btn-sm" id="refreshStatsBtn">Vernieuwen</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="stats-header">
+      <div>
+        <span class="eyebrow">Live Overzicht</span>
+        <h1>Hoeveel mensen bezoeken de website?</h1>
+      </div>
+    </div>
+
+    <div class="mode-banner" id="modeBanner">
+      Statistieken laden...
+    </div>
+
+    <section class="kpi-grid" aria-label="Kerncijfers">
+      <div class="kpi-card">
+        <span>Totaal aantal bezoeken</span>
+        <strong id="kpiTotalVisits">0</strong>
+      </div>
+      <div class="kpi-card">
+        <span>Unieke bezoekers</span>
+        <strong id="kpiUniqueVisitors">0</strong>
+      </div>
+      <div class="kpi-card">
+        <span>Bezoeken vandaag</span>
+        <strong id="kpiVisitsToday">0</strong>
+      </div>
+      <div class="kpi-card">
+        <span>Bestelde kerstpakketten</span>
+        <strong id="kpiTotalOrders">0</strong>
+      </div>
+    </section>
+
+    <section class="stats-panels">
+      <div class="panel">
+        <h2>Bezoeken per dag</h2>
+        <ul class="daily-list" id="dailyList"></ul>
+      </div>
+      <div class="panel">
+        <h2>Recente activiteit</h2>
+        <ul class="event-list" id="eventList"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const LOCAL_STATS_KEY = "mekanders_local_stats_v1";
+
+    function loadLocalStats() {
+      try {
+        const raw = localStorage.getItem(LOCAL_STATS_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      return { totalVisits: 0, uniqueVisitors: 0, visitsToday: 0, totalOrders: 0, dailyVisits: {}, recentEvents: [] };
+    }
+
+    function renderStats(data, isServerMode) {
+      const banner = document.getElementById("modeBanner");
+      banner.innerHTML = isServerMode
+        ? "<strong>Servermodus actief:</strong> Alle bezoekers van de website worden centraal bijgehouden."
+        : "<strong>Lokale modus (file://):</strong> Je bekijkt nu lokale browserstatistieken. Start <code>node server.js</code> om alle bezoekers wereldwijd/op het netwerk centraal te tellen.";
+
+      document.getElementById("kpiTotalVisits").textContent = data.totalVisits ?? 0;
+      document.getElementById("kpiUniqueVisitors").textContent = data.uniqueVisitors ?? 0;
+      document.getElementById("kpiVisitsToday").textContent = data.visitsToday ?? 0;
+      document.getElementById("kpiTotalOrders").textContent = data.totalOrders ?? 0;
+
+      const dailyList = document.getElementById("dailyList");
+      dailyList.innerHTML = "";
+      const entries = Object.entries(data.dailyVisits || {}).sort((a, b) => b[0].localeCompare(a[0]));
+
+      if (entries.length === 0) {
+        dailyList.innerHTML = "<li><span>Nog geen bezoeken geregistreerd</span><strong>0</strong></li>";
+      } else {
+        entries.slice(0, 10).forEach(([day, count]) => {
+          const li = document.createElement("li");
+          li.innerHTML = `<span>${day}</span><strong>${count} bezoeken</strong>`;
+          dailyList.appendChild(li);
+        });
+      }
+
+      const eventList = document.getElementById("eventList");
+      eventList.innerHTML = "";
+      const events = data.recentEvents || [];
+
+      if (events.length === 0) {
+        eventList.innerHTML = "<li><span>Nog geen recente activiteit</span></li>";
+      } else {
+        events.slice(0, 10).forEach((ev) => {
+          const li = document.createElement("li");
+          const time = new Date(ev.timestamp).toLocaleString("nl-BE");
+          const label =
+            ev.type === "order"
+              ? `🎁 Bestelling: ${ev.packageType || "Kerstpakket"}`
+              : "👀 Website bezocht";
+          li.innerHTML = `<span>${label}</span><small>${time}</small>`;
+          eventList.appendChild(li);
+        });
+      }
+    }
+
+    async function fetchAndRender() {
+      if (window.location.protocol.startsWith("http")) {
+        try {
+          const response = await fetch("/api/stats", { cache: "no-store" });
+          if (response.ok) {
+            const data = await response.json();
+            renderStats(data, true);
+            return;
+          }
+        } catch {}
+      }
+      renderStats(loadLocalStats(), false);
+    }
+
+    document.getElementById("refreshStatsBtn").addEventListener("click", fetchAndRender);
+    fetchAndRender();
+  </script>
+</body>
+</html>
